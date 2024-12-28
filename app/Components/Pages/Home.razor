@@ -1,0 +1,126 @@
+﻿@page "/"
+
+@rendermode InteractiveServer
+@using app.Data
+@using app.Model
+@using Microsoft.EntityFrameworkCore
+@inject AppDbContext DbContext
+
+<PageTitle>Home</PageTitle>
+
+<h3>Список товаров</h3>
+
+<!-- Поле поиска -->
+<div>
+    <input @oninput="OnSearchInput" placeholder="Поиск по названию..." />
+</div> 
+
+<!-- Кнопки пагинации -->
+<div style="margin: 10px 0;">
+    <button @onclick="PrevPage"  >Назад</button>
+    <span style="margin: 0 10px;">Страница: @(Start / PageSize + 1) / @Math.Ceiling((double)TotalCount / PageSize)</span>
+    <button @onclick="NextPage" >Вперёд</button> 
+</div>
+
+<!-- Список товаров или сообщения об отсутствии -->
+@if (isLoading)
+{
+    <p>Загрузка...</p>
+}
+else if (!Products.Any())
+{
+    <p>Нет товаров.</p>
+}
+else
+{
+    <ul>
+        @foreach (var product in Products)
+        {
+            <li>@product.Id — @product.Name</li>
+        }
+    </ul>
+}
+
+@code { 
+    private string SearchString = string.Empty;
+    private List<Product> Products = new();
+    private int Start = 0;
+    private int PageSize = 5;
+    private int TotalCount;
+    private bool isLoading;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        isLoading = true;
+        try
+        {
+            var query = DbContext.Products.AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(SearchString))
+            {
+                query = query.Where(p => p.Name.Contains(SearchString));
+            }
+
+            TotalCount = await query.CountAsync();
+
+            Products = await query
+                .OrderBy(p => p.Id)
+                .Skip(Start)
+                .Take(PageSize)
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Ошибка при загрузке данных: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged(); // Принудительная перерисовка
+        }
+    }
+
+    private async Task OnSearchInput(ChangeEventArgs e)
+    {
+        SearchString = e.Value?.ToString();
+        Start = 0;
+
+        await Task.Delay(300); // Задержка 300 мс
+        await LoadDataAsync();
+    }
+
+    private bool IsFirstPage => (Start <= 0);
+    private bool IsLastPage => (Start + PageSize >= TotalCount);
+
+    private async Task PrevPage()
+    {
+        Console.WriteLine("Метод PrevPage вызван."); // Логирование
+        if (!IsFirstPage)
+        {
+            Start -= PageSize;
+            if (Start < 0) Start = 0;
+            Console.WriteLine($"Переход на предыдущую страницу. Start = {Start}");
+            await LoadDataAsync();
+        }
+    }
+
+    private async Task NextPage()
+    {
+        Console.WriteLine("Метод NextPage вызван."); // Логирование
+        if (!IsLastPage)
+        {
+            Start += PageSize;
+            Console.WriteLine($"Переход на следующую страницу. Start = {Start}");
+            await LoadDataAsync();
+        }
+        else
+        {
+            Console.WriteLine("Кнопка 'Вперёд' заблокирована, так как это последняя страница.");
+        }
+    }
+}
